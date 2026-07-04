@@ -1,0 +1,24 @@
+# Python
+backend/.venv/
+backend/src/__pycache__/
+backend/src/**/*.pyc
+
+# Django
+backend/src/media/
+backend/src/staticfiles/
+backend/src/db.sqlite3
+backend/src/.env
+
+# React
+frontend/node_modules/
+frontend/dist/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
