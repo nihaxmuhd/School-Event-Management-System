@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { 
   Settings, 
   Save, 
@@ -15,7 +16,6 @@ interface SettingsViewProps {
   onUpdateConfig: (newConfig: SchoolFestConfig) => void;
   onResetData: () => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
-  allDataJson: any;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -23,7 +23,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateConfig,
   onResetData,
   onShowToast,
-  allDataJson
 }) => {
   const [schoolName, setSchoolName] = useState(config.schoolName);
   const [festName, setFestName] = useState(config.festName);
@@ -31,6 +30,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [tagline, setTagline] = useState(config.tagline);
   const [totalStudentsCount, setTotalStudentsCount] = useState(config.totalStudentsCount);
   const [points, setPoints] = useState<PointSettings>(config.pointSettings);
+  const [reportLoading, setReportLoading] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const setPointField = (field: keyof PointSettings, value: number) => {
     setPoints(prev => ({ ...prev, [field]: value }));
@@ -60,15 +61,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     onShowToast('Settings Saved', 'System settings & point rules updated. House points recalculated.');
   };
 
-  const handleExportBackup = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allDataJson, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `hidaya_sems_backup_${new Date().toISOString().slice(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    onShowToast('Backup Downloaded', 'Exported complete SEMS database backup JSON.');
+  const handleDownloadReport = async (report: 'students' | 'houses' | 'events' | 'registrations' | 'results' | 'leaderboard', format: 'csv' | 'xlsx' | 'pdf') => {
+    setReportLoading(`${report}-${format}`);
+    setReportError(null);
+    try {
+      const response = await axios.get(`/api/v1/reports/${report}/?format=${format}`, {
+        responseType: 'blob',
+        onDownloadProgress: (event) => {
+          if (event.total) {
+            const pct = Math.round((event.loaded / event.total) * 100);
+            setReportLoading(`${report}-${format}-${pct}`);
+          }
+        },
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${report}_report.${format === 'xlsx' ? 'xlsx' : format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      onShowToast('Report Downloaded', `${report} report exported as ${format.toUpperCase()}.`);
+    } catch (error: any) {
+      const message = error?.response?.data?.message || `Unable to download ${report} report.`;
+      setReportError(message);
+      onShowToast('Report Download Failed', message, 'error');
+    } finally {
+      setReportLoading(null);
+    }
   };
 
   return (
@@ -224,20 +246,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Database Backup & Maintenance
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Reports Download Center
             </h4>
 
             <p className="text-xs text-slate-500">
-              Export complete Hidaya SEMS state backup including student directory, event schedules, registrations, and house points.
+              Download backend-generated reports in PDF, Excel, or CSV format.
             </p>
 
-            <button
-              onClick={handleExportBackup}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export Complete JSON Backup</span>
-            </button>
+            {reportError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-3 text-[11px]">
+                {reportError}
+              </div>
+            )}
+
+            {([
+              ['students', 'Student Reports'],
+              ['houses', 'House Reports'],
+              ['events', 'Event Reports'],
+              ['registrations', 'Registration Reports'],
+              ['results', 'Result Reports'],
+              ['leaderboard', 'Leaderboard Reports'],
+            ] as const).map(([key, label]) => (
+              <div key={key} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700">{label}</span>
+                  <span className="text-[10px] text-slate-400">{reportLoading?.startsWith(key) ? 'Downloading...' : 'Ready'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => void handleDownloadReport(key, 'pdf')} className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1">
+                    <FileText className="w-3.5 h-3.5" /> PDF
+                  </button>
+                  <button onClick={() => void handleDownloadReport(key, 'xlsx')} className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1">
+                    <Download className="w-3.5 h-3.5" /> Excel
+                  </button>
+                  <button onClick={() => void handleDownloadReport(key, 'csv')} className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1">
+                    <Download className="w-3.5 h-3.5" /> CSV
+                  </button>
+                </div>
+              </div>
+            ))}
 
             <div className="pt-4 border-t border-slate-100">
               <h5 className="text-xs font-bold text-red-600 mb-1">Reset School SEMS Data</h5>

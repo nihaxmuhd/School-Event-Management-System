@@ -7,17 +7,19 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.registrations.models import Registration
+from apps.infrastructure.selectors import settings_object
 
 from .models import JudgeAssignment, JudgeScore, Result
 from .validators import validate_marks
 
 
 def point_settings():
+    settings = settings_object()
     return {
-        'first': Decimal('10'),
-        'second': Decimal('7'),
-        'third': Decimal('5'),
-        'participation': Decimal('2'),
+        'first': Decimal(str(settings.first_place_points)),
+        'second': Decimal(str(settings.second_place_points)),
+        'third': Decimal(str(settings.third_place_points)),
+        'participation': Decimal(str(settings.participation_points)),
     }
 
 

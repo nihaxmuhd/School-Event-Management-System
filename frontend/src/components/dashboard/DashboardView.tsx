@@ -14,6 +14,35 @@ import {
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { House, FestEvent, Student, StudentRegistration, EventResultRecord } from '../../types/festival';
 import { NavTab } from '../layout/Sidebar';
+import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+
+type DashboardApiHouse = {
+  rank: number | null;
+  house_id: string;
+  house_name: string;
+  house_code: string;
+  house_color: string;
+  total_house_points: number;
+  gold_count: number;
+  silver_count: number;
+  bronze_count: number;
+  participation_count?: number;
+};
+
+type DashboardApiResponse = {
+  total_students: number;
+  total_houses: number;
+  total_events: number;
+  total_registrations: number;
+  pending_registrations: number;
+  completed_events: number;
+  active_events: number;
+  total_house_points: number;
+  house_rankings: DashboardApiHouse[];
+  top_performing_houses: DashboardApiHouse[];
+  recent_results: Array<Record<string, any>>;
+  participation_statistics: Record<string, number>;
+};
 
 interface DashboardViewProps {
   houses: House[];
@@ -24,6 +53,10 @@ interface DashboardViewProps {
   onSelectTab: (tab: NavTab) => void;
   onSelectEventForResults: (eventId: string) => void;
   totalSchoolStudentsCount: number;
+  dashboardData?: DashboardApiResponse | null;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -34,17 +67,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   results,
   onSelectTab,
   onSelectEventForResults,
-  totalSchoolStudentsCount
+  totalSchoolStudentsCount,
+  dashboardData,
+  loading = false,
+  error = null,
+  onRetry
 }) => {
   const sortedHouses = [...houses].sort((a, b) => b.points - a.points);
-  const totalHousePoints = houses.reduce((acc, h) => acc + h.points, 0);
+  const totalHousePoints = dashboardData?.total_house_points ?? houses.reduce((acc, h) => acc + h.points, 0);
+  const totalStudents = dashboardData?.total_students ?? totalSchoolStudentsCount;
+  const totalEvents = dashboardData?.total_events ?? events.length;
+  const totalRegistrations = dashboardData?.total_registrations ?? registrations.length;
+  const pendingRegistrations = dashboardData?.pending_registrations ?? students.filter(s => s.registeredEventIds.length === 0).length;
+  const completedEvents = dashboardData?.completed_events ?? events.filter(e => e.status === 'Completed').length;
+  const activeEvents = dashboardData?.active_events ?? events.filter(e => e.status === 'In Progress').length;
+  const houseRankingRows = dashboardData?.house_rankings ?? sortedHouses.map((house, index) => ({
+    rank: index + 1,
+    house_id: house.id,
+    house_name: house.name,
+    house_code: house.id,
+    house_color: house.color,
+    total_house_points: house.points,
+    gold_count: house.gold,
+    silver_count: house.silver,
+    bronze_count: house.bronze,
+  }));
+  const topHouses = dashboardData?.top_performing_houses ?? houseRankingRows.slice(0, 3);
 
-  const registeredParticipantCount = registrations.length > 0 
-    ? new Set(registrations.map(r => r.studentId)).size 
-    : students.filter(s => s.status === 'Registered' || s.status === 'Checked-In' || s.registeredEventIds.length > 0).length;
-
-  const completedEvents = events.filter(e => e.status === 'Completed').length;
-  const inProgressEvents = events.filter(e => e.status === 'In Progress').length;
+  const registeredParticipantCount = dashboardData?.participation_statistics?.registrations ?? registrations.length;
   const upcomingEvents = events.filter(e => e.status === 'Upcoming').length;
 
   // Chart data for house points
@@ -53,6 +103,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     points: h.points,
     color: h.color
   }));
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-600">
+          <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+          <span className="text-sm font-semibold">Loading dashboard data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="max-w-md w-full bg-white border border-red-200 rounded-3xl p-6 text-center shadow-sm">
+          <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-slate-900">Dashboard unavailable</h3>
+          <p className="text-sm text-slate-500 mt-2">{error}</p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if ((dashboardData && totalStudents === 0 && totalEvents === 0 && totalRegistrations === 0) || (!dashboardData && houses.length === 0 && events.length === 0 && students.length === 0 && registrations.length === 0)) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 text-center shadow-sm">
+          <Sparkles className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-slate-900">No dashboard data yet</h3>
+          <p className="text-sm text-slate-500 mt-2">Once events, registrations, and results are available, the dashboard will populate automatically.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -67,7 +161,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900">{totalSchoolStudentsCount}</span>
+            <span className="text-2xl font-extrabold text-slate-900">{totalStudents}</span>
             <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100">
               Enrolled
             </span>
@@ -87,10 +181,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900">{registeredParticipantCount}</span>
-            <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 flex items-center">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> {Math.round((registeredParticipantCount / totalSchoolStudentsCount) * 100)}%
-            </span>
+              <span className="text-2xl font-extrabold text-slate-900">{registeredParticipantCount}</span>
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 flex items-center">
+              <TrendingUp className="w-3 h-3 mr-0.5" /> {Math.round((registeredParticipantCount / (totalStudents || 1)) * 100)}%
+              </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">
             Across Junior & Senior literary disciplines
@@ -106,11 +200,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900">{events.length}</span>
+            <span className="text-2xl font-extrabold text-slate-900">{totalEvents}</span>
             <span className="text-xs text-slate-500">English Fest 2026</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span className="text-amber-600 font-semibold">{inProgressEvents} Live</span>
+            <span className="text-amber-600 font-semibold">{activeEvents} Live</span>
             <span className="text-slate-400">•</span>
             <span className="text-indigo-600 font-semibold">{upcomingEvents} Upcoming</span>
             <span className="text-slate-400">•</span>
@@ -157,12 +251,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="space-y-3.5">
-            {sortedHouses.map((house, idx) => {
-              const maxPoints = Math.max(...sortedHouses.map(h => h.points), 1);
-              const percentage = Math.round((house.points / maxPoints) * 100);
+            {houseRankingRows.map((house, idx) => {
+              const maxPoints = Math.max(...houseRankingRows.map(h => h.total_house_points), 1);
+              const percentage = Math.round((house.total_house_points / maxPoints) * 100);
 
               return (
-                <div key={house.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 transition-all hover:bg-white hover:shadow-xs">
+                <div key={house.house_id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 transition-all hover:bg-white hover:shadow-xs">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold ${
@@ -173,21 +267,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         #{idx + 1}
                       </span>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900">{house.name}</h4>
-                        <p className="text-[11px] text-slate-500">Captain: {house.captainName}</p>
+                        <h4 className="text-sm font-bold text-slate-900">{house.house_name}</h4>
+                        <p className="text-[11px] text-slate-500">House Code: {house.house_code}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-4">
                       {/* Medals */}
                       <div className="hidden sm:flex items-center gap-2 text-xs font-bold">
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md border border-amber-200">🥇 {house.gold}</span>
-                        <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md">🥈 {house.silver}</span>
-                        <span className="px-2 py-0.5 bg-amber-800/10 text-amber-900 rounded-md">🥉 {house.bronze}</span>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md border border-amber-200">🥇 {house.gold_count}</span>
+                        <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md">🥈 {house.silver_count}</span>
+                        <span className="px-2 py-0.5 bg-amber-800/10 text-amber-900 rounded-md">🥉 {house.bronze_count}</span>
                       </div>
 
                       <div className="text-right">
-                        <span className="text-lg font-black text-slate-900">{house.points}</span>
+                        <span className="text-lg font-black text-slate-900">{house.total_house_points}</span>
                         <span className="text-xs font-semibold text-slate-500 ml-1">pts</span>
                       </div>
                     </div>
@@ -197,7 +291,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${percentage}%`, backgroundColor: house.color }}
+                      style={{ width: `${percentage}%`, backgroundColor: house.house_color }}
                     />
                   </div>
                 </div>
@@ -261,7 +355,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* List of In-Progress & Next Events */}
             <div className="space-y-2.5">
-              {events.slice(0, 4).map(ev => {
+            {events.slice(0, 4).map(ev => {
                 const isCompleted = ev.status === 'Completed';
                 const isInProgress = ev.status === 'In Progress';
 

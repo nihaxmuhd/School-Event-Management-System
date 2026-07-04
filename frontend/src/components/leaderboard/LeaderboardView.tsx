@@ -17,10 +17,10 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
 
-  const sortedHouses = [...houses].sort((a, b) => b.points - a.points);
-  const top1 = sortedHouses[0];
-  const top2 = sortedHouses[1];
-  const top3 = sortedHouses[2];
+  const orderedHouses = [...houses];
+  const top1 = orderedHouses[0];
+  const top2 = orderedHouses[1];
+  const top3 = orderedHouses[2];
 
   const handleCelebrateLeader = () => {
     confetti({
@@ -30,7 +30,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     });
   };
 
-  const filteredHouses = sortedHouses.filter(h => 
+  const filteredHouses = orderedHouses.filter(h => 
     h.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
     h.captainName.toLowerCase().includes(filterQuery.toLowerCase())
   );

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Calendar, 
-  Search, 
-  Clock, 
-  Plus, 
-  X, 
-  Edit3, 
-  Trash2, 
+import {
+  Calendar,
+  Search,
+  Clock,
+  Plus,
+  X,
+  Edit3,
+  Trash2,
   Users,
-  Award
+  Award,
 } from 'lucide-react';
 import { FestEvent, CategoryType, StudentRegistration } from '../../types/festival';
 import { getCategoryColor } from '../../utils/festivalUtils';
@@ -23,6 +23,16 @@ interface EventManagementViewProps {
   onCloseQuickAddModal: () => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
   onSelectEventForResults: (eventId: string) => void;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  pagination: { count: number; page: number; page_size: number; next: string | null; previous: string | null } | null;
+  onSearch: (search: string) => void;
+  onFilterChange: (filters: { category?: string; status?: string; search?: string }) => void;
+  onPageChange: (page: number) => void;
+  canEditEvents: boolean;
+  canDeleteEvents: boolean;
+  readOnly: boolean;
 }
 
 const CATEGORIES: CategoryType[] = [
@@ -31,7 +41,7 @@ const CATEGORIES: CategoryType[] = [
   'Senior Boys',
   'Senior Girls',
   'HSS Boys',
-  'HSS Girls'
+  'HSS Girls',
 ];
 
 export const EventManagementView: React.FC<EventManagementViewProps> = ({
@@ -43,17 +53,26 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
   showQuickAddModal,
   onCloseQuickAddModal,
   onShowToast,
-  onSelectEventForResults
+  onSelectEventForResults,
+  loading,
+  error,
+  onRetry,
+  pagination,
+  onSearch,
+  onFilterChange,
+  onPageChange,
+  canEditEvents,
+  canDeleteEvents,
+  readOnly,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
 
-  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(showQuickAddModal);
   const [editingEvent, setEditingEvent] = useState<FestEvent | null>(null);
 
-  // Form fields
   const [name, setName] = useState('');
   const [level, setLevel] = useState<'Junior' | 'Senior'>('Junior');
   const [category, setCategory] = useState<CategoryType>('Junior Boys');
@@ -62,9 +81,7 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
   const [status, setStatus] = useState<'Upcoming' | 'In Progress' | 'Completed'>('Upcoming');
 
   React.useEffect(() => {
-    if (showQuickAddModal) {
-      setIsModalOpen(true);
-    }
+    if (showQuickAddModal) setIsModalOpen(true);
   }, [showQuickAddModal]);
 
   const handleOpenNewModal = () => {
@@ -97,17 +114,16 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
     }
 
     if (editingEvent) {
-      const updated: FestEvent = {
+      onUpdateEvent({
         ...editingEvent,
         name: name.trim(),
         level,
         category,
         duration,
         maxParticipants,
-        status
-      };
-      onUpdateEvent(updated);
-      onShowToast('Event Updated', `${updated.name} has been updated.`);
+        status,
+      });
+      onShowToast('Event Updated', `${name.trim()} has been updated.`);
     } else {
       onAddEvent({
         name: name.trim(),
@@ -115,73 +131,93 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
         category,
         duration,
         maxParticipants,
-        status
+        status,
       });
-      onShowToast('Event Added', `${name} (${category}) added to schedule.`);
+      onShowToast('Event Added', `${name.trim()} (${category}) added to schedule.`);
     }
 
     setIsModalOpen(false);
     onCloseQuickAddModal();
   };
 
-  const filteredEvents = events.filter(ev => {
-    const matchesSearch = ev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ev.category.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredEvents = events.filter((ev) => {
+    const matchesSearch =
+      ev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ev.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'ALL' || ev.category === selectedCategory;
     const matchesLvl = selectedLevel === 'ALL' || ev.level === selectedLevel;
-    return matchesSearch && matchesCat && matchesLvl;
+    const matchesStatus = selectedStatus === 'ALL' || ev.status === selectedStatus;
+    return matchesSearch && matchesCat && matchesLvl && matchesStatus;
   });
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    onSearch(value);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    onFilterChange({ category: value, status: selectedStatus, search: searchQuery });
+  };
+
+  const handleLevelChange = (value: string) => {
+    setSelectedLevel(value);
+    onFilterChange({ category: selectedCategory, status: selectedStatus, search: searchQuery });
+  };
+
+  const handleStatusChange = (value: string) => {
+    setSelectedStatus(value);
+    onFilterChange({ category: selectedCategory, status: value, search: searchQuery });
+  };
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-emerald-600" /> English Fest 2026 Event Timetable
           </h3>
           <p className="text-xs text-slate-500">
-            {events.length} Total events • Junior & Senior literary competitions
+            {pagination?.count ?? events.length} Total events - Junior & Senior literary competitions
           </p>
         </div>
 
-        <button
-          onClick={handleOpenNewModal}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Add Event</span>
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleOpenNewModal}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add Event</span>
+          </button>
+        )}
       </div>
 
-      {/* Filter Options Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
-        {/* Search */}
         <div className="relative w-full md:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
             placeholder="Search event name or category..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
 
-        {/* Category Pills */}
         <div className="flex items-center gap-1 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           <button
-            onClick={() => setSelectedCategory('ALL')}
+            onClick={() => handleCategoryChange('ALL')}
             className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             All Categories
           </button>
-          {CATEGORIES.map(cat => (
+          {CATEGORIES.map((cat) => (
             <button
               key={cat}
-              onClick={() => setSelectedCategory(cat)}
+              onClick={() => handleCategoryChange(cat)}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
                 selectedCategory === cat ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -191,19 +227,37 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
           ))}
         </div>
 
-        {/* Level Dropdown */}
         <select
           value={selectedLevel}
-          onChange={(e) => setSelectedLevel(e.target.value)}
+          onChange={(e) => handleLevelChange(e.target.value)}
           className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 focus:outline-none"
         >
           <option value="ALL">All Levels</option>
           <option value="Junior">Junior Events</option>
           <option value="Senior">Senior Events</option>
         </select>
+
+        <select
+          value={selectedStatus}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 focus:outline-none"
+        >
+          <option value="ALL">All Status</option>
+          <option value="Upcoming">Upcoming</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Completed">Completed</option>
+        </select>
       </div>
 
-      {/* Events Table */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 rounded-2xl p-4 text-xs flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button onClick={onRetry} className="px-3 py-1.5 bg-red-600 text-white rounded-lg font-semibold">
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs min-w-[720px]">
@@ -218,7 +272,13 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEvents.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                    Loading events...
+                  </td>
+                </tr>
+              ) : filteredEvents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-slate-400">
                     No scheduled events match your search query.
@@ -227,7 +287,7 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
               ) : (
                 filteredEvents.map((ev) => {
                   const catStyle = getCategoryColor(ev.category);
-                  const participantCount = registrations.filter(r => r.eventId === ev.id).length;
+                  const participantCount = registrations.filter((r) => r.eventId === ev.id).length;
 
                   return (
                     <tr key={ev.id} className="hover:bg-slate-50/80 transition-colors">
@@ -259,10 +319,15 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
-                          ev.status === 'In Progress' ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' :
-                          ev.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-700 border-slate-200'
-                        }`}>
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                            ev.status === 'In Progress'
+                              ? 'bg-red-100 text-red-700 border-red-300 animate-pulse'
+                              : ev.status === 'Completed'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
                           {ev.status}
                         </span>
                       </td>
@@ -276,24 +341,28 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
                             <Award className="w-3 h-3" /> Marks Entry
                           </button>
 
-                          <button
-                            onClick={() => handleOpenEditModal(ev)}
-                            className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
+                          {canEditEvents && (
+                            <button
+                              onClick={() => handleOpenEditModal(ev)}
+                              className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
 
-                          <button
-                            onClick={() => {
-                              if (confirm(`Delete event "${ev.name}"?`)) {
-                                onDeleteEvent(ev.id);
-                                onShowToast('Event Removed', `${ev.name} deleted.`);
-                              }
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canDeleteEvents && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete event "${ev.name}"?`)) {
+                                  onDeleteEvent(ev.id);
+                                  onShowToast('Event Removed', `${ev.name} deleted.`);
+                                }
+                              }}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -305,8 +374,29 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
         </div>
       </div>
 
-      {/* Add / Edit Event Modal */}
-      {isModalOpen && (
+      {pagination && pagination.count > pagination.page_size && (
+        <div className="flex items-center justify-between text-xs text-slate-600">
+          <div>Page {pagination.page}</div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={!pagination.previous}
+              onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              disabled={!pagination.next}
+              onClick={() => onPageChange(pagination.page + 1)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isModalOpen && !readOnly && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
@@ -360,8 +450,10 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
                     onChange={(e) => setCategory(e.target.value as CategoryType)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none"
                   >
-                    {CATEGORIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
                   </select>
                 </div>
