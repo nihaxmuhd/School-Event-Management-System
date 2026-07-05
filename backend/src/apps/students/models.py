@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import TimeStampedModel
@@ -26,14 +26,14 @@ class Student(TimeStampedModel):
     status = models.CharField(max_length=10, choices=StatusChoices.choices, default=StatusChoices.ACTIVE, db_index=True)
     is_deleted = models.BooleanField(default=False)
     created_by = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='created_students',
     )
     updated_by = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

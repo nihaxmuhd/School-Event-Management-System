@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.test import TestCase
 from rest_framework.test import APIClient
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q

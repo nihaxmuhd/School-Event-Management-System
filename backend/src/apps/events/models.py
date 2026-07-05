@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import TimeStampedModel
@@ -32,14 +32,14 @@ class Event(TimeStampedModel):
     display_order = models.PositiveIntegerField(default=0, db_index=True)
     is_active = models.BooleanField(default=True, db_index=True)
     created_by = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='created_events',
     )
     updated_by = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
