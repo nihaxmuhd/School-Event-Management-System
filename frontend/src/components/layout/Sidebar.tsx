@@ -48,7 +48,6 @@ interface SidebarProps {
 
 // Role Access Rules Matrix
 export const ROLE_PERMISSIONS: Record<UserRole, NavTab[]> = {
-  'Super Admin': ['dashboard', 'students', 'pending', 'registration', 'events', 'results', 'leaderboard', 'houses', 'users', 'settings'],
   Admin: ['dashboard', 'students', 'pending', 'registration', 'events', 'results', 'leaderboard', 'houses', 'users'],
   Manager: ['dashboard', 'events', 'results'],
   'Team Leader': ['dashboard', 'assignment']
@@ -198,7 +197,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Flame className="w-3.5 h-3.5 text-amber-500" /> Logged In Role
           </span>
           <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${
-            userRole === 'Super Admin' ? 'bg-slate-900 text-white' :
             userRole === 'Admin' ? 'bg-purple-100 text-purple-800' :
             userRole === 'Manager' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
           }`}>
@@ -206,7 +204,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
         </div>
         <p className="text-[10px] text-slate-500">
-          {userRole === 'Super Admin' && 'Root access incl. system settings.'}
           {userRole === 'Admin' && 'Full festival management access.'}
           {userRole === 'Manager' && 'Events & Marks entry desk active.'}
           {userRole === 'Team Leader' && 'House team assignment desk active.'}
@@ -217,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
-            {userRole === 'Super Admin' ? 'SA' : userRole === 'Admin' ? 'AD' : userRole === 'Manager' ? 'MG' : 'TL'}
+            {userRole === 'Admin' ? 'AD' : userRole === 'Manager' ? 'MG' : 'TL'}
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-slate-900 truncate">Staff ({userRole})</p>

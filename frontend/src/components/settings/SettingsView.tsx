@@ -153,7 +153,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           </div>
 
-          {/* Point System Configuration Card (Super Admin exclusive) */}
+          {/* Point System Configuration Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
             <div className="flex items-center gap-2">
               <Trophy className="w-5 h-5 text-amber-500" />

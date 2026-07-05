@@ -73,7 +73,7 @@ export interface EventResultRecord {
   scores: ParticipantMarkScore[];
 }
 
-export type UserRole = 'Super Admin' | 'Admin' | 'Manager' | 'Team Leader';
+export type UserRole = 'Admin' | 'Manager' | 'Team Leader';
 
 export interface PointSettings {
   first: number;
