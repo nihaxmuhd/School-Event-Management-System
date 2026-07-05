@@ -5,9 +5,9 @@ import { House, Student } from '../../types/festival';
 interface HouseManagementViewProps {
   houses: House[];
   students: Student[];
-  onAddHouse: (house: Omit<House, 'points' | 'gold' | 'silver' | 'bronze'>) => void;
-  onUpdateHouse: (house: House) => void;
-  onDeleteHouse: (houseId: string) => void;
+  onAddHouse: (house: Omit<House, 'points' | 'gold' | 'silver' | 'bronze'>) => Promise<boolean | void>;
+  onUpdateHouse: (house: House) => Promise<boolean | void>;
+  onDeleteHouse: (houseId: string) => Promise<boolean | void>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -57,7 +57,7 @@ export const HouseManagementView: React.FC<HouseManagementViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       onShowToast('Name Required', 'Please enter the house name', 'error');
@@ -66,34 +66,34 @@ export const HouseManagementView: React.FC<HouseManagementViewProps> = ({
     const preset = COLOR_PRESETS[presetIdx];
 
     if (editingHouse) {
-      onUpdateHouse({
+      const ok = await onUpdateHouse({
         ...editingHouse,
         name: name.trim(),
-        captainName: captainName.trim() || '—',
+        captainName: captainName.trim() || '-',
         color: preset.color,
         bgLight: preset.bgLight,
         badgeBg: preset.badgeBg,
         textColor: preset.textColor,
         borderColor: preset.borderColor
       });
-      onShowToast('House Updated', `${name} has been updated.`);
+      if (ok !== false) onShowToast('House Updated', `${name} has been updated.`);
     } else {
       const id = slugify(name) || `house-${Date.now()}`;
       if (houses.some(h => h.id === id)) {
         onShowToast('Duplicate House', 'A house with a similar name already exists.', 'error');
         return;
       }
-      onAddHouse({
+      const ok = await onAddHouse({
         id,
         name: name.trim(),
-        captainName: captainName.trim() || '—',
+        captainName: captainName.trim() || '-',
         color: preset.color,
         bgLight: preset.bgLight,
         badgeBg: preset.badgeBg,
         textColor: preset.textColor,
         borderColor: preset.borderColor
       });
-      onShowToast('House Created', `${name} added to the championship.`);
+      if (ok !== false) onShowToast('House Created', `${name} added to the championship.`);
     }
     setIsModalOpen(false);
   };
@@ -151,14 +151,14 @@ export const HouseManagementView: React.FC<HouseManagementViewProps> = ({
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (memberCount > 0) {
                           onShowToast('Cannot Delete', `${h.name} still has ${memberCount} students assigned.`, 'error');
                           return;
                         }
                         if (confirm(`Delete ${h.name}?`)) {
-                          onDeleteHouse(h.id);
-                          onShowToast('House Deleted', `${h.name} was removed.`);
+                          const ok = await onDeleteHouse(h.id);
+                          if (ok !== false) onShowToast('House Deleted', `${h.name} was removed.`);
                         }
                       }}
                       className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"

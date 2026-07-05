@@ -30,6 +30,24 @@ const DEFAULT_CONFIG: SchoolFestConfig = {
 };
 
 const emptyHouse = (name: string, id: string): House => ({ id, name, color: '#64748b', bgLight: 'bg-slate-50', badgeBg: 'bg-slate-100 text-slate-700 border-slate-200', textColor: 'text-slate-600', borderColor: 'border-slate-400', captainName: '', points: 0, gold: 0, silver: 0, bronze: 0 });
+const getApiErrorMessage = (error: any) => {
+  const data = error?.response?.data;
+  if (!data) return error?.message || 'Request failed';
+  if (typeof data === 'string') return data;
+  if (data.message) return data.message;
+  if (data.detail) return data.detail;
+  if (data.errors) {
+    if (typeof data.errors === 'string') return data.errors;
+    if (Array.isArray(data.errors)) return data.errors.join(', ');
+    return Object.entries(data.errors)
+      .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+      .join(' | ');
+  }
+  return Object.entries(data)
+    .filter(([k]) => k !== 'success' && k !== 'meta')
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+    .join(' | ') || 'Request failed';
+};
 
 export function App() {
   const { user, isAuthenticated, isLoading, login, logout } = useAuth();
@@ -40,6 +58,8 @@ export function App() {
   const [registrations, setRegistrations] = useState<StudentRegistration[]>([]);
   const [results, setResults] = useState<EventResultRecord[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [selectedResultEventId, setSelectedResultEventId] = useState<string | undefined>();
   const [showQuickAddEventModal, setShowQuickAddEventModal] = useState(false);
@@ -53,20 +73,30 @@ export function App() {
   };
 
   const loadData = async () => {
-    const [houses, evs, sts, regs, res, me] = await Promise.all([
-      resourceService.getHouses(),
-      resourceService.getEvents(),
-      resourceService.getStudents(),
-      resourceService.getRegistrations(),
-      resourceService.getResults(),
-      resourceService.getUsers().catch(() => []),
-    ]);
-    setBaseHouses(houses.length ? houses : [emptyHouse('Blue House', 'blue')]);
-    setEvents(evs);
-    setStudents(sts);
-    setRegistrations(regs);
-    setResults(res);
-    setUsers(me);
+    setDataLoading(true);
+    setDataError(null);
+    try {
+      const [houses, evs, sts, regs, res, me, leaderboard] = await Promise.all([
+        resourceService.getHouses(),
+        resourceService.getEvents(),
+        resourceService.getStudents(),
+        resourceService.getRegistrations(),
+        resourceService.getResults(),
+        resourceService.getUsers().catch(() => []),
+        resourceService.getLeaderboard().catch(() => []),
+      ]);
+      console.log('[App] Houses fetched from backend:', houses);
+      setBaseHouses((leaderboard.length ? leaderboard : houses).length ? (leaderboard.length ? leaderboard : houses) : [emptyHouse('Blue House', 'blue')]);
+      setEvents(evs);
+      setStudents(sts);
+      setRegistrations(regs);
+      setResults(res);
+      setUsers(me);
+    } catch (error: any) {
+      setDataError(error?.response?.data?.message || error?.message || 'Failed to load data');
+    } finally {
+      setDataLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -85,25 +115,86 @@ export function App() {
 
   const refreshAll = async () => { await loadData(); };
 
-  const apiMutate = async (fn: () => Promise<any>) => {
-    await fn();
-    await refreshAll();
+  const apiMutate = async (fn: () => Promise<any>, successMessage?: string) => {
+    try {
+      await fn();
+      await refreshAll();
+      if (successMessage) addToast('Success', successMessage, 'success');
+      return true;
+    } catch (error: any) {
+      addToast('Request Failed', getApiErrorMessage(error), 'error');
+      return false;
+    }
   };
 
   const handleLogout = async () => { await logout(); };
 
   const handleResetData = () => addToast('Unavailable', 'Backend reset endpoint is not implemented yet.', 'info');
-  const handleAddStudent = (newSt: Omit<Student, 'id' | 'registeredEventIds'>) => apiMutate(async () => apiClient.post('/students/', { ...newSt, house: newSt.houseId })).then(() => addToast('Student Added'));
+  const handleAddStudent = (newSt: Omit<Student, 'id' | 'registeredEventIds'>) => apiMutate(async () => {
+    const payload = {
+      admission_no: newSt.admissionNo,
+      student_name: newSt.name,
+      gender: newSt.gender,
+      student_class: newSt.className,
+      division: newSt.division,
+      house: newSt.houseId,
+      status: newSt.status,
+    };
+    console.log('[App] Final student payload sent to API:', payload);
+    return apiClient.post('/students/', payload);
+  });
   const handleBulkImportStudents = (_: Omit<Student, 'id' | 'registeredEventIds'>[]) => addToast('Import', 'Excel import should use backend import endpoint.', 'info');
-  const handleUpdateStudent = (updatedSt: Student) => apiMutate(async () => apiClient.patch(`/students/${updatedSt.id}/`, { ...updatedSt, house: updatedSt.houseId }));
+  const handleUpdateStudent = (updatedSt: Student) => apiMutate(async () => apiClient.patch(`/students/${updatedSt.id}/`, {
+    admission_no: updatedSt.admissionNo,
+    student_name: updatedSt.name,
+    gender: updatedSt.gender,
+    student_class: updatedSt.className,
+    division: updatedSt.division,
+    house: updatedSt.houseId,
+    status: updatedSt.status,
+  }));
   const handleDeleteStudent = (stId: string) => apiMutate(async () => apiClient.delete(`/students/${stId}/`));
-  const handleAddHouse = (house: Omit<House, 'points' | 'gold' | 'silver' | 'bronze'>) => apiMutate(async () => apiClient.post('/houses/', house));
-  const handleUpdateHouse = (updated: House) => apiMutate(async () => apiClient.patch(`/houses/${updated.id}/`, updated));
+  const handleAddHouse = (house: Omit<House, 'points' | 'gold' | 'silver' | 'bronze'>) => apiMutate(async () => apiClient.post('/houses/', {
+    name: house.name,
+    code: house.id.toUpperCase(),
+    color: house.color,
+    is_active: true,
+  }));
+  const handleUpdateHouse = (updated: House) => apiMutate(async () => apiClient.patch(`/houses/${updated.id}/`, {
+    name: updated.name,
+    code: updated.id.toUpperCase(),
+    color: updated.color,
+    is_active: true,
+  }));
   const handleDeleteHouse = (houseId: string) => apiMutate(async () => apiClient.delete(`/houses/${houseId}/`));
-  const handleAddEvent = (newEv: Omit<FestEvent, 'id'>) => apiMutate(async () => apiClient.post('/events/', { ...newEv, maximum_participants: newEv.maxParticipants, event_type: newEv.level === 'Senior' ? 'Group' : 'Individual', maximum_marks: 100, number_of_judges: 1, display_order: 0, is_active: true }));
-  const handleUpdateEvent = (updatedEv: FestEvent) => apiMutate(async () => apiClient.patch(`/events/${updatedEv.id}/`, { ...updatedEv, maximum_participants: updatedEv.maxParticipants, event_type: updatedEv.level === 'Senior' ? 'Group' : 'Individual', maximum_marks: 100, number_of_judges: 1, display_order: 0, is_active: true }));
+  const handleAddEvent = (newEv: Omit<FestEvent, 'id'>) => apiMutate(async () => apiClient.post('/events/', {
+    name: newEv.name,
+    code: newEv.name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    category: newEv.category,
+    event_type: newEv.level === 'Senior' ? 'Group' : 'Individual',
+    maximum_participants: newEv.maxParticipants,
+    maximum_team_size: newEv.level === 'Senior' ? 4 : null,
+    maximum_marks: 100,
+    number_of_judges: 1,
+    status: newEv.status === 'Completed' ? 'Completed' : newEv.status === 'In Progress' ? 'Judging' : 'Registration Open',
+    display_order: 0,
+    is_active: true,
+  }));
+  const handleUpdateEvent = (updatedEv: FestEvent) => apiMutate(async () => apiClient.patch(`/events/${updatedEv.id}/`, {
+    name: updatedEv.name,
+    code: updatedEv.name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    category: updatedEv.category,
+    event_type: updatedEv.level === 'Senior' ? 'Group' : 'Individual',
+    maximum_participants: updatedEv.maxParticipants,
+    maximum_team_size: updatedEv.level === 'Senior' ? 4 : null,
+    maximum_marks: 100,
+    number_of_judges: 1,
+    status: updatedEv.status === 'Completed' ? 'Completed' : updatedEv.status === 'In Progress' ? 'Judging' : 'Registration Open',
+    display_order: 0,
+    is_active: true,
+  }));
   const handleDeleteEvent = (evId: string) => apiMutate(async () => apiClient.delete(`/events/${evId}/`));
-  const handleAddRegistration = (studentId: string, eventId: string, category: CategoryType) => apiMutate(async () => apiClient.post('/registrations/', { student: studentId, event: eventId, category }));
+  const handleAddRegistration = (studentId: string, eventId: string, category: CategoryType) => apiMutate(async () => apiClient.post('/registrations/', { student: studentId, event: eventId }));
   const handleRemoveRegistration = (regId: string) => apiMutate(async () => apiClient.delete(`/registrations/${regId}/`));
   const handleSaveResult = (newResult: EventResultRecord) => setResults((prev) => prev.some((r) => r.eventId === newResult.eventId) ? prev.map((r) => r.eventId === newResult.eventId ? newResult : r) : [...prev, newResult]);
   const handleAddUser = (newUser: Omit<SystemUser, 'id'>) => setUsers((prev) => [{ id: `usr-${Date.now()}`, ...newUser }, ...prev]);
@@ -113,8 +204,17 @@ export function App() {
   const registeredParticipantCount = registrations.length > 0 ? new Set(registrations.map((r) => r.studentId)).size : students.filter((s) => s.status !== 'Active').length;
   const pendingCount = students.filter((s) => s.registeredEventIds.length === 0).length;
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (isLoading || dataLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!isAuthenticated) return <LoginPage onLogin={login} schoolName={config.schoolName} festName={config.festName} />;
+  if (dataError) return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-3 text-center">
+        <h1 className="text-xl font-bold text-slate-900">Unable to load dashboard data</h1>
+        <p className="text-sm text-slate-600">{dataError}</p>
+        <button onClick={refreshAll} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold">Retry</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-slate-900 font-sans antialiased">

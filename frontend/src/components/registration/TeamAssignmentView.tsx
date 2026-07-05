@@ -9,8 +9,8 @@ interface TeamAssignmentViewProps {
   events: FestEvent[];
   houses: House[];
   registrations: StudentRegistration[];
-  onAddRegistration: (studentId: string, eventId: string, category: CategoryType) => void;
-  onRemoveRegistration: (regId: string) => void;
+  onAddRegistration: (studentId: string, eventId: string, category: CategoryType) => Promise<boolean | void>;
+  onRemoveRegistration: (regId: string) => Promise<boolean | void>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -47,7 +47,7 @@ export const TeamAssignmentView: React.FC<TeamAssignmentViewProps> = ({
     (selectedCategory.startsWith('HSS') && e.level === 'Senior')
   );
 
-  const handleAssign = (e: React.FormEvent) => {
+  const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentId) { onShowToast('Select Student', 'Choose a student from your House first', 'error'); return; }
     if (!selectedEventId) { onShowToast('Select Event', 'Choose an event to assign', 'error'); return; }
@@ -59,8 +59,8 @@ export const TeamAssignmentView: React.FC<TeamAssignmentViewProps> = ({
     }
 
     const ev = events.find(x => x.id === selectedEventId);
-    onAddRegistration(selectedStudentId, selectedEventId, selectedCategory);
-    onShowToast('Student Assigned', `${selectedStudent?.name} assigned to ${ev?.name}`);
+    const ok = await onAddRegistration(selectedStudentId, selectedEventId, selectedCategory);
+    if (ok !== false) onShowToast('Student Assigned', `${selectedStudent?.name} assigned to ${ev?.name}`);
     setSelectedEventId('');
   };
 
@@ -238,7 +238,7 @@ export const TeamAssignmentView: React.FC<TeamAssignmentViewProps> = ({
                         <td className="py-3 px-3 font-semibold text-slate-800">{ev?.name}</td>
                         <td className="py-3 px-3 text-right">
                           <button
-                            onClick={() => { onRemoveRegistration(reg.id); onShowToast('Assignment Removed', `Removed ${st?.name} from ${ev?.name}`); }}
+                            onClick={async () => { const ok = await onRemoveRegistration(reg.id); if (ok !== false) onShowToast('Assignment Removed', `Removed ${st?.name} from ${ev?.name}`); }}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                             title="Remove Assignment"
                           >

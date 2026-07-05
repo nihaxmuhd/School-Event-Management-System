@@ -8,8 +8,8 @@ interface AdminRegistrationViewProps {
   events: FestEvent[];
   houses: House[];
   registrations: StudentRegistration[];
-  onAddRegistration: (studentId: string, eventId: string, category: CategoryType) => void;
-  onRemoveRegistration: (regId: string) => void;
+  onAddRegistration: (studentId: string, eventId: string, category: CategoryType) => Promise<boolean | void>;
+  onRemoveRegistration: (regId: string) => Promise<boolean | void>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -49,14 +49,14 @@ export const AdminRegistrationView: React.FC<AdminRegistrationViewProps> = ({
     (assignCategory.startsWith('HSS') && e.level === 'Senior')
   );
 
-  const handleQuickAssign = (e: React.FormEvent) => {
+  const handleQuickAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assignStudent || !assignEventId) { onShowToast('Select Event', 'Choose an event to assign', 'error'); return; }
     const dup = registrations.some(r => r.studentId === assignStudent.id && r.eventId === assignEventId);
     if (dup) { onShowToast('Already Registered', `${assignStudent.name} is already in this event.`, 'error'); return; }
     const ev = events.find(x => x.id === assignEventId);
-    onAddRegistration(assignStudent.id, assignEventId, assignCategory);
-    onShowToast('Registered', `${assignStudent.name} registered for ${ev?.name}`);
+    const ok = await onAddRegistration(assignStudent.id, assignEventId, assignCategory);
+    if (ok !== false) onShowToast('Registered', `${assignStudent.name} registered for ${ev?.name}`);
     setAssignStudent(null);
     setAssignEventId('');
   };
@@ -230,7 +230,7 @@ export const AdminRegistrationView: React.FC<AdminRegistrationViewProps> = ({
                                 <span key={r.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${catStyle.bg} ${catStyle.text} ${catStyle.border}`}>
                                   {ev?.name}
                                   <button
-                                    onClick={() => { onRemoveRegistration(r.id); onShowToast('Removed', `${st.name} removed from ${ev?.name}`); }}
+                                    onClick={async () => { const ok = await onRemoveRegistration(r.id); if (ok !== false) onShowToast('Removed', `${st.name} removed from ${ev?.name}`); }}
                                     className="hover:text-red-600"
                                     title="Remove"
                                   >

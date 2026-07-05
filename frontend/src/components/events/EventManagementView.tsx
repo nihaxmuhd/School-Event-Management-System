@@ -16,9 +16,9 @@ import { getCategoryColor } from '../../utils/festivalUtils';
 interface EventManagementViewProps {
   events: FestEvent[];
   registrations: StudentRegistration[];
-  onAddEvent: (newEvent: Omit<FestEvent, 'id'>) => void;
-  onUpdateEvent: (event: FestEvent) => void;
-  onDeleteEvent: (eventId: string) => void;
+  onAddEvent: (newEvent: Omit<FestEvent, 'id'>) => Promise<boolean | void>;
+  onUpdateEvent: (event: FestEvent) => Promise<boolean | void>;
+  onDeleteEvent: (eventId: string) => Promise<boolean | void>;
   showQuickAddModal: boolean;
   onCloseQuickAddModal: () => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
@@ -89,7 +89,7 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSubmitForm = (e: React.FormEvent) => {
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       onShowToast('Name Required', 'Please enter event name', 'error');
@@ -106,10 +106,10 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
         maxParticipants,
         status
       };
-      onUpdateEvent(updated);
-      onShowToast('Event Updated', `${updated.name} has been updated.`);
+      const ok = await onUpdateEvent(updated);
+      if (ok !== false) onShowToast('Event Updated', `${updated.name} has been updated.`);
     } else {
-      onAddEvent({
+      const ok = await onAddEvent({
         name: name.trim(),
         level,
         category,
@@ -117,7 +117,7 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
         maxParticipants,
         status
       });
-      onShowToast('Event Added', `${name} (${category}) added to schedule.`);
+      if (ok !== false) onShowToast('Event Added', `${name} (${category}) added to schedule.`);
     }
 
     setIsModalOpen(false);
@@ -284,10 +284,10 @@ export const EventManagementView: React.FC<EventManagementViewProps> = ({
                           </button>
 
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm(`Delete event "${ev.name}"?`)) {
-                                onDeleteEvent(ev.id);
-                                onShowToast('Event Removed', `${ev.name} deleted.`);
+                                const ok = await onDeleteEvent(ev.id);
+                                if (ok !== false) onShowToast('Event Removed', `${ev.name} deleted.`);
                               }
                             }}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"

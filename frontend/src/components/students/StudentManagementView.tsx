@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   UserPlus, 
   Search, 
@@ -17,10 +17,10 @@ import { ExcelImportModal } from './ExcelImportModal';
 interface StudentManagementViewProps {
   students: Student[];
   houses: House[];
-  onAddStudent: (newStudent: Omit<Student, 'id' | 'registeredEventIds'>) => void;
-  onBulkImportStudents: (students: Omit<Student, 'id' | 'registeredEventIds'>[]) => void;
-  onUpdateStudent: (student: Student) => void;
-  onDeleteStudent: (studentId: string) => void;
+  onAddStudent: (newStudent: Omit<Student, 'id' | 'registeredEventIds'>) => Promise<boolean | void>;
+  onBulkImportStudents: (students: Omit<Student, 'id' | 'registeredEventIds'>[]) => Promise<boolean | void> | void;
+  onUpdateStudent: (student: Student) => Promise<boolean | void>;
+  onDeleteStudent: (studentId: string) => Promise<boolean | void>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -47,7 +47,13 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
   const [className, setClassName] = useState('8');
   const [division, setDivision] = useState('A');
   const [gender, setGender] = useState<GenderType>('Male');
-  const [houseId, setHouseId] = useState<HouseId>('blue');
+  const [houseId, setHouseId] = useState<HouseId>('');
+
+  useEffect(() => {
+    if (!houseId && houses.length > 0) {
+      setHouseId(houses[0].id);
+    }
+  }, [houses, houseId]);
 
   const handleOpenNewModal = () => {
     setEditingStudent(null);
@@ -56,7 +62,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
     setClassName('8');
     setDivision('A');
     setGender('Male');
-    setHouseId('blue');
+    setHouseId(houses[0]?.id || '');
     setIsModalOpen(true);
   };
 
@@ -71,8 +77,24 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSubmitForm = (e: React.FormEvent) => {
+  useEffect(() => {
+    console.log('[StudentForm] Houses fetched from backend:', houses);
+  }, [houses]);
+
+  useEffect(() => {
+    console.log('[StudentForm] Selected dropdown value:', houseId);
+  }, [houseId]);
+
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[StudentForm] Form state before submit:', {
+      admissionNo,
+      name,
+      className,
+      division,
+      gender,
+      houseId,
+    });
     if (!name.trim() || !admissionNo.trim()) {
       onShowToast('Required Fields Missing', 'Please enter student name and admission number', 'error');
       return;
@@ -88,10 +110,10 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
         gender,
         houseId
       };
-      onUpdateStudent(updated);
-      onShowToast('Student Updated', `${updated.name}'s record has been updated.`);
+      const ok = await onUpdateStudent(updated);
+      if (ok !== false) onShowToast('Student Updated', `${updated.name}'s record has been updated.`);
     } else {
-      onAddStudent({
+      const ok = await onAddStudent({
         admissionNo: admissionNo.trim(),
         name: name.trim(),
         className,
@@ -100,7 +122,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
         houseId,
         status: 'Active'
       });
-      onShowToast('Student Added', `${name} (${admissionNo}) added to student directory.`);
+      if (ok !== false) onShowToast('Student Added', `${name} (${admissionNo}) added to student directory.`);
     }
 
     setIsModalOpen(false);
@@ -296,10 +318,10 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
                           </button>
 
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm(`Remove student ${st.name}?`)) {
-                                onDeleteStudent(st.id);
-                                onShowToast('Student Removed', `${st.name} was deleted.`);
+                                const ok = await onDeleteStudent(st.id);
+                                if (ok !== false) onShowToast('Student Removed', `${st.name} was deleted.`);
                               }
                             }}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"

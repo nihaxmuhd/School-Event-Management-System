@@ -164,4 +164,3 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
-print("CORS =", CORS_ALLOWED_ORIGINS)
