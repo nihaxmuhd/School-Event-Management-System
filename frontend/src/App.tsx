@@ -30,6 +30,11 @@ const DEFAULT_CONFIG: SchoolFestConfig = {
 };
 
 const emptyHouse = (name: string, id: string): House => ({ id, name, color: '#64748b', bgLight: 'bg-slate-50', badgeBg: 'bg-slate-100 text-slate-700 border-slate-200', textColor: 'text-slate-600', borderColor: 'border-slate-400', captainName: '', points: 0, gold: 0, silver: 0, bronze: 0 });
+const toBackendUserRole = (role: SystemUser['role']) => {
+  if (role === 'Admin') return 'ADMIN';
+  if (role === 'Manager') return 'MANAGER';
+  return 'TEAM_LEADER';
+};
 const getApiErrorMessage = (error: any) => {
   const data = error?.response?.data;
   if (!data) return error?.message || 'Request failed';
@@ -197,9 +202,31 @@ export function App() {
   const handleAddRegistration = (studentId: string, eventId: string, category: CategoryType) => apiMutate(async () => apiClient.post('/registrations/', { student: studentId, event: eventId }));
   const handleRemoveRegistration = (regId: string) => apiMutate(async () => apiClient.delete(`/registrations/${regId}/`));
   const handleSaveResult = (newResult: EventResultRecord) => setResults((prev) => prev.some((r) => r.eventId === newResult.eventId) ? prev.map((r) => r.eventId === newResult.eventId ? newResult : r) : [...prev, newResult]);
-  const handleAddUser = (newUser: Omit<SystemUser, 'id'>) => setUsers((prev) => [{ id: `usr-${Date.now()}`, ...newUser }, ...prev]);
-  const handleUpdateUser = (updatedUser: SystemUser) => setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-  const handleDeleteUser = (userId: string) => setUsers((prev) => prev.filter((u) => u.id !== userId));
+  const handleAddUser = async (newUser: Omit<SystemUser, 'id'> & { password?: string; username?: string }) => {
+    return apiMutate(async () => resourceService.createUser({
+      full_name: newUser.name,
+      username: newUser.username || '',
+      email: newUser.email,
+      role: toBackendUserRole(newUser.role),
+      password: newUser.password,
+      is_active: newUser.status === 'Active',
+    }));
+  };
+  const handleUpdateUser = async (updatedUser: SystemUser & { password?: string; username?: string }) => {
+    const payload: any = {
+      full_name: updatedUser.name,
+      username: updatedUser.username || '',
+      email: updatedUser.email,
+      role: toBackendUserRole(updatedUser.role),
+      is_active: updatedUser.status === 'Active',
+    };
+    if (updatedUser.password) payload.password = updatedUser.password;
+    return apiMutate(async () => resourceService.updateUser(updatedUser.id, {
+      ...payload,
+    }));
+  };
+  const handleDeleteUser = async (userId: string) => apiMutate(async () => resourceService.deleteUser(userId));
+  const handleResetUserPassword = async (userId: string, password: string) => apiMutate(async () => resourceService.resetUserPassword(userId, password));
 
   const registeredParticipantCount = registrations.length > 0 ? new Set(registrations.map((r) => r.studentId)).size : students.filter((s) => s.status !== 'Active').length;
   const pendingCount = students.filter((s) => s.registeredEventIds.length === 0).length;
@@ -231,7 +258,18 @@ export function App() {
           {currentTab === 'events' && allowedTabs.includes('events') && <EventManagementView events={events} registrations={registrations} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} showQuickAddModal={showQuickAddEventModal} onCloseQuickAddModal={() => setShowQuickAddEventModal(false)} onShowToast={addToast} onSelectEventForResults={(evId) => { setSelectedResultEventId(evId); setCurrentTab('results'); }} />}
           {currentTab === 'results' && allowedTabs.includes('results') && <ResultEntryView events={events} students={students} houses={computedHouses} registrations={registrations} results={results} selectedEventId={selectedResultEventId} onSaveResult={handleSaveResult} onShowToast={addToast} />}
           {currentTab === 'leaderboard' && allowedTabs.includes('leaderboard') && <LeaderboardView houses={computedHouses} />}
-          {currentTab === 'users' && allowedTabs.includes('users') && <UsersView users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onShowToast={addToast} />}
+          {currentTab === 'users' && allowedTabs.includes('users') && (
+            <UsersView
+              users={users}
+              onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
+              onActivateUser={async (userId) => apiMutate(async () => resourceService.activateUser(userId))}
+              onDeactivateUser={async (userId) => apiMutate(async () => resourceService.deactivateUser(userId))}
+              onResetPassword={handleResetUserPassword}
+              onShowToast={addToast}
+            />
+          )}
           {currentTab === 'settings' && allowedTabs.includes('settings') && <SettingsView config={config} onUpdateConfig={setConfig} onResetData={handleResetData} onShowToast={addToast} allDataJson={{ config, events, students, registrations, results, users, houses: baseHouses }} />}
         </main>
       </div>

@@ -12,9 +12,12 @@ import { SystemUser, UserRole } from '../../types/festival';
 
 interface UsersViewProps {
   users: SystemUser[];
-  onAddUser: (newUser: Omit<SystemUser, 'id'>) => void;
-  onUpdateUser: (user: SystemUser) => void;
-  onDeleteUser: (userId: string) => void;
+  onAddUser: (newUser: Omit<SystemUser, 'id'> & { password?: string; username?: string }) => Promise<boolean | void>;
+  onUpdateUser: (user: SystemUser & { password?: string; username?: string }) => Promise<boolean | void>;
+  onDeleteUser: (userId: string) => Promise<boolean | void>;
+  onActivateUser: (userId: string) => Promise<boolean | void>;
+  onDeactivateUser: (userId: string) => Promise<boolean | void>;
+  onResetPassword: (userId: string, password: string) => Promise<boolean | void>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -25,6 +28,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
   onAddUser,
   onUpdateUser,
   onDeleteUser,
+  onActivateUser,
+  onDeactivateUser,
+  onResetPassword,
   onShowToast
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,54 +42,68 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
   // Form Fields
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('Manager');
   const [department, setDepartment] = useState('English Department');
+  const [password, setPassword] = useState('');
 
   const handleOpenNewModal = () => {
     setEditingUser(null);
     setName('');
+    setUsername('');
     setEmail('');
     setRole('Manager');
     setDepartment('English Department');
+    setPassword('');
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (u: SystemUser) => {
     setEditingUser(u);
     setName(u.name);
+    setUsername('');
     setEmail(u.email);
     setRole(u.role);
     setDepartment(u.department);
+    setPassword('');
     setIsModalOpen(true);
   };
 
-  const handleSubmitForm = (e: React.FormEvent) => {
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) {
       onShowToast('Required Fields Missing', 'Please enter staff name and email', 'error');
       return;
     }
+    if (!editingUser && !password.trim()) {
+      onShowToast('Required Fields Missing', 'Please enter a password for the new user', 'error');
+      return;
+    }
 
     if (editingUser) {
-      const updated: SystemUser = {
+      const updated: SystemUser & { password?: string; username?: string } = {
         ...editingUser,
         name: name.trim(),
         email: email.trim(),
         role,
-        department
+        department,
+        password: password.trim() || undefined,
+        username: username.trim() || undefined
       };
-      onUpdateUser(updated);
-      onShowToast('User Updated', `${updated.name}'s account updated.`);
+      const ok = await onUpdateUser(updated);
+      if (ok !== false) onShowToast('User Updated', `${updated.name}'s account updated.`);
     } else {
-      onAddUser({
+      const ok = await onAddUser({
         name: name.trim(),
         email: email.trim(),
         role,
         department,
-        status: 'Active'
+        status: 'Active',
+        password: password.trim(),
+        username: username.trim() || undefined
       });
-      onShowToast('Staff User Added', `${name} granted ${role} access.`);
+      if (ok !== false) onShowToast('Staff User Added', `${name} granted ${role} access.`);
     }
 
     setIsModalOpen(false);
@@ -215,6 +235,36 @@ export const UsersView: React.FC<UsersViewProps> = ({
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={async () => {
+                              const nextStatus = u.status === 'Active' ? 'Inactive' : 'Active';
+                              const ok = nextStatus === 'Active'
+                                ? await onActivateUser(u.id)
+                                : await onDeactivateUser(u.id);
+                              if (ok !== false) {
+                                onShowToast(
+                                  nextStatus === 'Active' ? 'Account Activated' : 'Account Deactivated',
+                                  `${u.name}'s account was ${nextStatus.toLowerCase()}.`
+                                );
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+                          >
+                            {u.status === 'Active' ? 'Deactivate' : 'Activate'}
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              const newPassword = prompt(`Reset password for ${u.name}`);
+                              if (!newPassword) return;
+                              const ok = await onResetPassword(u.id, newPassword);
+                              if (ok !== false) onShowToast('Password Reset', `Password reset for ${u.name}.`);
+                            }}
+                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+                          >
+                            Reset Password
+                          </button>
+
+                          <button
                             onClick={() => handleOpenEditModal(u)}
                             className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                             title="Edit Staff Account"
@@ -223,10 +273,10 @@ export const UsersView: React.FC<UsersViewProps> = ({
                           </button>
 
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm(`Remove staff user account for ${u.name}?`)) {
-                                onDeleteUser(u.id);
-                                onShowToast('Account Deleted', `${u.name}'s account was removed.`);
+                                const ok = await onDeleteUser(u.id);
+                                if (ok !== false) onShowToast('Account Deleted', `${u.name}'s account was removed.`);
                               }
                             }}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
@@ -290,10 +340,32 @@ export const UsersView: React.FC<UsersViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Role *</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
+                <label className="block font-bold text-slate-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  placeholder="Optional - auto-generated if blank"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">{editingUser ? 'Reset Password' : 'Password *'}</label>
+                <input
+                  type="password"
+                  placeholder={editingUser ? 'Leave blank to keep current password' : 'Set initial password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none"
+                />
+              </div>
+
+      <div>
+        <label className="block font-bold text-slate-700 mb-1">Role *</label>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none"
                 >
                   <option value="Admin">Admin (Full Control)</option>

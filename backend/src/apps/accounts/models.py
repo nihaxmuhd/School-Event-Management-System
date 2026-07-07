@@ -26,6 +26,8 @@ class User(AbstractUser):
         auto_now=True
     )
 
+    is_deleted = models.BooleanField(default=False)
+
     class Meta:
         db_table = "users"
         ordering = ["username"]

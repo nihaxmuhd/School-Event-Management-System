@@ -75,7 +75,7 @@ const toUser = (item: any): SystemUser => ({
   email: item.email,
   role: item.role,
   department: '',
-  status: 'Active',
+  status: item.is_active === false ? 'Inactive' : 'Active',
 });
 
 export const resourceService = {
@@ -99,8 +99,30 @@ export const resourceService = {
     return (await fetchList<any>('/results/')).map(toResult);
   },
   getUsers: async (): Promise<SystemUser[]> => {
-    const response = await apiClient.get('/auth/me/');
-    return [toUser(response.data)];
+    const response = await apiClient.get('/users/');
+    return (unwrap<any[]>(response.data) || []).map(toUser);
+  },
+  createUser: async (payload: any) => {
+    const response = await apiClient.post('/users/', payload);
+    return toUser(unwrap(response.data));
+  },
+  updateUser: async (id: string, payload: any) => {
+    const response = await apiClient.patch(`/users/${id}/`, payload);
+    return toUser(unwrap(response.data));
+  },
+  deleteUser: async (id: string) => {
+    await apiClient.delete(`/users/${id}/`);
+  },
+  resetUserPassword: async (id: string, password: string) => {
+    await apiClient.post(`/users/${id}/reset-password/`, { password });
+  },
+  activateUser: async (id: string) => {
+    const response = await apiClient.post(`/users/${id}/activate/`);
+    return toUser(unwrap(response.data));
+  },
+  deactivateUser: async (id: string) => {
+    const response = await apiClient.post(`/users/${id}/deactivate/`);
+    return toUser(unwrap(response.data));
   },
   getLeaderboard: async (): Promise<House[]> => {
     return (await fetchList<any>('/leaderboard/')).map(toHouse);
